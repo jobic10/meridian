@@ -10,7 +10,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,61 @@ import {
   patientName,
 } from "@/lib/format";
 
+type Prescription = {
+  id: number;
+  drugName: string;
+  dosage: string;
+  duration: string;
+  dispensed: boolean;
+};
+
+type LabResult = {
+  id: number;
+  testName: string;
+  result: string | null;
+  status: "PENDING" | "COMPLETED";
+  enteredBy: { name: string };
+};
+
+type MedicalRecord = {
+  id: number;
+  visitDate: string;
+  symptoms: string;
+  diagnosis: string;
+  treatmentNotes: string | null;
+  doctor: { name: string; specialisation: string | null };
+  prescriptions: Prescription[];
+  labResults: LabResult[];
+};
+
+type Appointment = {
+  id: number;
+  date: string;
+  time: string;
+  reason: string | null;
+  status: "PENDING" | "COMPLETED" | "CANCELLED";
+  doctor: { name: string };
+};
+
+type PatientDetail = {
+  id: number;
+  patientCode: string;
+  firstName: string;
+  lastName: string;
+  gender: string;
+  dateOfBirth: string;
+  address: string | null;
+  phone: string | null;
+  nextOfKin: string | null;
+  bloodGroup: string | null;
+  allergies: string | null;
+  createdAt: string;
+  registeredByName: string | null;
+  medicalRecords: MedicalRecord[];
+  appointments: Appointment[];
+  labResults: LabResult[];
+};
+
 export default async function PatientDetailPage({
   params,
   searchParams,
@@ -34,30 +89,13 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const { registered } = await searchParams;
 
-  const patient = await prisma.patient.findUnique({
-    where: { id },
-    include: {
-      registeredBy: { select: { name: true } },
-      medicalRecords: {
-        orderBy: { visitDate: "desc" },
-        include: {
-          doctor: { select: { name: true, specialisation: true } },
-          prescriptions: true,
-          labResults: true,
-        },
-      },
-      appointments: {
-        orderBy: { date: "desc" },
-        include: { doctor: { select: { name: true } } },
-      },
-      labResults: {
-        orderBy: { createdAt: "desc" },
-        include: { enteredBy: { select: { name: true } } },
-      },
-    },
-  });
-
-  if (!patient) notFound();
+  let patient: PatientDetail;
+  try {
+    patient = await apiGet(`/patients/${id}/`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) notFound();
+    throw err;
+  }
 
   const canAddRecord = user.role === "DOCTOR" || user.role === "ADMIN";
   const canOrderLab = ["ADMIN", "DOCTOR", "NURSE"].includes(user.role);
@@ -66,11 +104,7 @@ export default async function PatientDetailPage({
   );
 
   const doctors = canSchedule
-    ? await prisma.user.findMany({
-        where: { role: "DOCTOR", status: "ACTIVE" },
-        select: { id: true, name: true, specialisation: true },
-        orderBy: { name: "asc" },
-      })
+    ? await apiGet("/users/?role=DOCTOR&status=ACTIVE")
     : [];
 
   const allPrescriptions = patient.medicalRecords.flatMap((r) =>
@@ -106,15 +140,15 @@ export default async function PatientDetailPage({
           <p className="mt-1.5 text-[13.5px] text-ink-muted">
             {calculateAge(patient.dateOfBirth)} years old · {patient.gender} ·
             Registered {formatDate(patient.createdAt)}
-            {patient.registeredBy ? ` by ${patient.registeredBy.name}` : ""}
+            {patient.registeredByName ? ` by ${patient.registeredByName}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canOrderLab && <AddLabDialog patientId={patient.id} />}
+          {canOrderLab && <AddLabDialog patientId={String(patient.id)} />}
           {canSchedule && (
-            <ScheduleAppointmentDialog doctors={doctors} patientId={patient.id} />
+            <ScheduleAppointmentDialog doctors={doctors} patientId={String(patient.id)} />
           )}
-          {canAddRecord && <AddRecordDialog patientId={patient.id} />}
+          {canAddRecord && <AddRecordDialog patientId={String(patient.id)} />}
         </div>
       </div>
 

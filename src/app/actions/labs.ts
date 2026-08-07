@@ -3,9 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-
-const LAB_ROLES = ["ADMIN", "DOCTOR", "NURSE"] as const;
+import { apiPost, apiPatch, ApiError } from "@/lib/api";
 
 const labSchema = z.object({
   patientId: z.string().min(1),
@@ -20,7 +18,7 @@ export async function createLabResultAction(
   _prevState: LabFormState,
   formData: FormData
 ): Promise<LabFormState> {
-  const user = await requireRole([...LAB_ROLES]);
+  await requireRole(["ADMIN", "DOCTOR", "NURSE"]);
 
   const parsed = labSchema.safeParse({
     patientId: formData.get("patientId"),
@@ -33,25 +31,17 @@ export async function createLabResultAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
 
-  const patient = await prisma.patient.findUnique({
-    where: { id: parsed.data.patientId },
-    select: { id: true },
-  });
-  if (!patient) return { error: "Patient not found." };
-
-  const hasResult = Boolean(parsed.data.result?.trim());
-
-  await prisma.labResult.create({
-    data: {
-      patientId: parsed.data.patientId,
-      testName: parsed.data.testName,
+  try {
+    await apiPost("/lab-results/create/", {
+      patient: Number(parsed.data.patientId),
+      test_name: parsed.data.testName,
       result: parsed.data.result,
       notes: parsed.data.notes,
-      status: hasResult ? "COMPLETED" : "PENDING",
-      enteredById: user.id,
-      completedAt: hasResult ? new Date() : null,
-    },
-  });
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Unable to reach the server. Please try again." };
+  }
 
   revalidatePath(`/patients/${parsed.data.patientId}`);
   revalidatePath("/lab");
@@ -70,7 +60,7 @@ export async function completeLabResultAction(
   _prevState: CompleteLabFormState,
   formData: FormData
 ): Promise<CompleteLabFormState> {
-  await requireRole([...LAB_ROLES]);
+  await requireRole(["ADMIN", "DOCTOR", "NURSE"]);
 
   const parsed = completeSchema.safeParse({
     labResultId: formData.get("labResultId"),
@@ -81,16 +71,16 @@ export async function completeLabResultAction(
     return { error: parsed.error.issues[0]?.message ?? "Enter the result." };
   }
 
-  const lab = await prisma.labResult.update({
-    where: { id: parsed.data.labResultId },
-    data: {
+  let lab: { patientId: number };
+  try {
+    lab = await apiPatch(`/lab-results/${parsed.data.labResultId}/complete/`, {
       result: parsed.data.result,
       notes: parsed.data.notes,
-      status: "COMPLETED",
-      completedAt: new Date(),
-    },
-    select: { patientId: true },
-  });
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Unable to reach the server. Please try again." };
+  }
 
   revalidatePath(`/patients/${lab.patientId}`);
   revalidatePath("/lab");

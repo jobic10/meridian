@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import type { Role } from "@/generated/prisma/client";
+import type { Role } from "@/lib/rbac";
 
 /**
  * For use at the top of protected Server Components / pages.

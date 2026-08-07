@@ -9,7 +9,7 @@ export function DispenseButton({
   prescriptionId,
   drugName,
 }: {
-  prescriptionId: string;
+  prescriptionId: number;
   drugName: string;
 }) {
   const [isPending, startTransition] = useTransition();

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { PatientSearch } from "@/components/patient-search";
 import { Button } from "@/components/ui/button";
@@ -25,20 +25,17 @@ export default async function PatientsPage({
   const query = typeof q === "string" ? q.trim() : "";
   const canRegister = user.role === "RECORDS_OFFICER" || user.role === "ADMIN";
 
-  const patients = await prisma.patient.findMany({
-    where: query
-      ? {
-          OR: [
-            { firstName: { contains: query } },
-            { lastName: { contains: query } },
-            { patientCode: { contains: query } },
-            { phone: { contains: query } },
-          ],
-        }
-      : undefined,
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const patients: Array<{
+    id: number;
+    patientCode: string;
+    firstName: string;
+    lastName: string;
+    gender: string;
+    dateOfBirth: string;
+    bloodGroup: string | null;
+    phone: string | null;
+    createdAt: string;
+  }> = await apiGet(`/patients/${query ? `?q=${encodeURIComponent(query)}` : ""}`);
 
   return (
     <div>

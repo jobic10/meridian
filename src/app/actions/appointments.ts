@@ -3,9 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-
-const SCHEDULING_ROLES = ["ADMIN", "DOCTOR", "NURSE", "RECORDS_OFFICER"] as const;
+import { apiPost, apiPatch, ApiError } from "@/lib/api";
 
 const appointmentSchema = z.object({
   patientId: z.string().min(1, "Select a patient"),
@@ -21,7 +19,7 @@ export async function createAppointmentAction(
   _prevState: AppointmentFormState,
   formData: FormData
 ): Promise<AppointmentFormState> {
-  await requireRole([...SCHEDULING_ROLES]);
+  await requireRole(["ADMIN", "DOCTOR", "NURSE", "RECORDS_OFFICER"]);
 
   const parsed = appointmentSchema.safeParse({
     patientId: formData.get("patientId"),
@@ -35,32 +33,18 @@ export async function createAppointmentAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
 
-  const date = new Date(parsed.data.date);
-  if (Number.isNaN(date.getTime())) {
-    return { error: "Enter a valid date." };
-  }
-
-  const [patient, doctor] = await Promise.all([
-    prisma.patient.findUnique({ where: { id: parsed.data.patientId }, select: { id: true } }),
-    prisma.user.findUnique({
-      where: { id: parsed.data.doctorId },
-      select: { id: true, role: true, status: true },
-    }),
-  ]);
-  if (!patient) return { error: "Patient not found." };
-  if (!doctor || doctor.role !== "DOCTOR" || doctor.status !== "ACTIVE") {
-    return { error: "Select an active doctor." };
-  }
-
-  await prisma.appointment.create({
-    data: {
-      patientId: parsed.data.patientId,
-      doctorId: parsed.data.doctorId,
-      date,
+  try {
+    await apiPost("/appointments/", {
+      patient: Number(parsed.data.patientId),
+      doctor: Number(parsed.data.doctorId),
+      date: parsed.data.date,
       time: parsed.data.time,
       reason: parsed.data.reason,
-    },
-  });
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Unable to reach the server. Please try again." };
+  }
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${parsed.data.patientId}`);
@@ -69,16 +53,12 @@ export async function createAppointmentAction(
 }
 
 export async function updateAppointmentStatusAction(
-  appointmentId: string,
+  appointmentId: number,
   status: "COMPLETED" | "CANCELLED" | "PENDING"
 ) {
-  await requireRole([...SCHEDULING_ROLES]);
+  await requireRole(["ADMIN", "DOCTOR", "NURSE", "RECORDS_OFFICER"]);
 
-  const appointment = await prisma.appointment.update({
-    where: { id: appointmentId },
-    data: { status },
-    select: { patientId: true },
-  });
+  const appointment = await apiPatch(`/appointments/${appointmentId}/status/`, { status });
 
   revalidatePath("/appointments");
   revalidatePath(`/patients/${appointment.patientId}`);

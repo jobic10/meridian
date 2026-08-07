@@ -4,7 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiPost, ApiError } from "@/lib/api";
 
 const patientSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -25,7 +25,7 @@ export async function createPatientAction(
   _prevState: PatientFormState,
   formData: FormData
 ): Promise<PatientFormState> {
-  const user = await requireRole(["RECORDS_OFFICER", "ADMIN"]);
+  await requireRole(["RECORDS_OFFICER", "ADMIN"]);
 
   const parsed = patientSchema.safeParse({
     firstName: formData.get("firstName"),
@@ -44,25 +44,13 @@ export async function createPatientAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
 
-  const dob = new Date(parsed.data.dateOfBirth);
-  if (Number.isNaN(dob.getTime()) || dob > new Date()) {
-    return { error: "Enter a valid date of birth." };
+  let patient: { id: number };
+  try {
+    patient = await apiPost("/patients/", parsed.data);
+  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Unable to reach the server. Please try again." };
   }
-
-  const year = new Date().getFullYear();
-  const patient = await prisma.$transaction(async (tx) => {
-    const count = await tx.patient.count({
-      where: { patientCode: { startsWith: `PT-${year}-` } },
-    });
-    return tx.patient.create({
-      data: {
-        ...parsed.data,
-        dateOfBirth: dob,
-        patientCode: `PT-${year}-${String(count + 1).padStart(4, "0")}`,
-        registeredById: user.id,
-      },
-    });
-  });
 
   revalidatePath("/patients");
   redirect(`/patients/${patient.id}?registered=1`);

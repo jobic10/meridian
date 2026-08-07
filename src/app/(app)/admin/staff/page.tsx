@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { AddStaffDialog } from "@/components/staff/add-staff-dialog";
 import { ToggleStatusButton } from "@/components/staff/toggle-status-button";
@@ -13,14 +13,21 @@ import {
   TableCell,
   TableEmpty,
 } from "@/components/ui/table";
-import { ROLE_LABELS } from "@/lib/rbac";
+import { ROLE_LABELS, type Role } from "@/lib/rbac";
+
+type StaffMember = {
+  id: number;
+  name: string;
+  username: string;
+  role: Role;
+  specialisation: string | null;
+  status: "ACTIVE" | "INACTIVE";
+};
 
 export default async function StaffPage() {
   const currentUser = await requireRole(["ADMIN"]);
 
-  const staff = await prisma.user.findMany({
-    orderBy: [{ status: "asc" }, { name: "asc" }],
-  });
+  const staff: StaffMember[] = await apiGet("/users/");
 
   return (
     <div>

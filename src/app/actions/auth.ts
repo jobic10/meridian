@@ -1,9 +1,8 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { apiPost, ApiError } from "@/lib/api";
 import { createSession, deleteSession } from "@/lib/session";
 
 const loginSchema = z.object({
@@ -26,20 +25,19 @@ export async function loginAction(
     return { error: "Enter both your username and password." };
   }
 
-  const user = await prisma.user.findUnique({
-    where: { username: parsed.data.username.trim().toLowerCase() },
-  });
-
-  if (!user || user.status !== "ACTIVE") {
-    return { error: "Those credentials don't match an active account." };
+  try {
+    const data = await apiPost("/auth/login/", {
+      username: parsed.data.username.trim().toLowerCase(),
+      password: parsed.data.password,
+    });
+    await createSession(data.access);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return { error: err.message };
+    }
+    return { error: "Unable to reach the server. Please try again." };
   }
 
-  const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-  if (!valid) {
-    return { error: "Those credentials don't match an active account." };
-  }
-
-  await createSession(user.id);
   redirect("/dashboard");
 }
 

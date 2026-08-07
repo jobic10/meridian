@@ -10,7 +10,7 @@ export function ToggleStatusButton({
   status,
   disabled,
 }: {
-  userId: string;
+  userId: number;
   status: "ACTIVE" | "INACTIVE";
   disabled?: boolean;
 }) {

@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ROLE_LABELS } from "@/lib/rbac";
-import type { Role } from "@/generated/prisma/client";
+import type { Role } from "@/lib/rbac";
 
 function initials(name: string) {
   return name

@@ -12,12 +12,22 @@ while covering the same functional requirements: patient registration,
 medical records, appointment scheduling, prescriptions, laboratory results,
 role-based access control, and administrative reporting.
 
+This is a **two-service app**: this repo is the Next.js frontend; the
+backend lives alongside it in [`../meridian-api`](../meridian-api) as a
+Django REST Framework project. Both need to be running for the app to work.
+
 ## Quick start
 
 ```bash
+# 1. Backend — from ../meridian-api
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_demo
+python manage.py runserver 8811
+
+# 2. Frontend — from this directory, in a second terminal
 npm install
-npx prisma migrate dev   # creates prisma/dev.db and applies the schema
-npx prisma db seed       # seeds demo staff accounts and sample patients
 npm run dev
 ```
 
@@ -35,24 +45,28 @@ Visit `http://localhost:3000`. Sign in with any seeded account — password is
 
 ## Architecture
 
-- **Next.js 16** (App Router, Turbopack, React 19) — server components for
-  data fetching, server actions for mutations, no separate REST/GraphQL
-  layer to maintain.
-- **Prisma 7 + SQLite** in development (`prisma/dev.db`), trivially swapped
-  to Postgres for production by changing the datasource provider and
-  `DATABASE_URL` — see [Hosting](#hosting).
-- **Auth**: hand-rolled session cookie (HS256 JWT via `jose`), `bcryptjs`
-  password hashing, `proxy.ts` for the coarse "are you logged in" redirect
-  and a per-request Data Access Layer (`src/lib/session.ts`,
-  `src/lib/auth.ts`) that re-verifies the user and role on every request —
-  see the code comments for why both layers exist.
+- **Next.js 16** (App Router, Turbopack, React 19) as the frontend/BFF —
+  Server Components fetch from the Django API, Server Actions POST/PATCH to
+  it. There's no database client in this repo at all; `src/lib/api.ts` is
+  the only thing that talks to the backend.
+- **Django REST Framework** (`../meridian-api`) owns the data model, auth,
+  and every authorization decision. It's a *private* API — reachable only
+  from this Next.js server, never from a browser — so it carries no public
+  CORS/CSRF surface.
+- **Auth**: Django issues a JWT (`djangorestframework-simplejwt`) on login;
+  Next.js stores only the access token, in an httpOnly cookie (8h lifetime,
+  no refresh flow — a shift-length session, by design). `proxy.ts` does a
+  coarse "is there a token, and does it look unexpired" check to avoid
+  redirect loops; `src/lib/session.ts` calls Django's `/api/auth/me/` on
+  every request for the actual answer, since that's the only place a
+  revoked or expired token is authoritatively rejected.
 - **UI**: Tailwind CSS v4 + Radix UI primitives, hand-styled (not a stock
-  shadcn theme) around a warm "clinical archive" palette — deep teal,
-  warm paper, a serif/sans display pairing (Fraunces + Inter).
+  shadcn theme) around a warm "clinical archive" palette — deep teal, warm
+  paper, a serif/sans display pairing (Fraunces + Inter).
 - **RBAC**: five roles (Administrator, Doctor, Nurse, Records Officer,
-  Pharmacist), enforced in `src/lib/rbac.ts` (nav visibility) and
-  `requireRole()` (actual access control, checked again inside every server
-  action — never trust the client for this).
+  Pharmacist). `src/lib/rbac.ts` drives nav visibility (UX only); the real
+  enforcement is server-side in Django's `role_required()` permission
+  classes, re-checked on every single API call.
 
 ## Project structure
 
@@ -60,9 +74,10 @@ Visit `http://localhost:3000`. Sign in with any seeded account — password is
 src/app/(app)/          protected pages, wrapped in the sidebar shell
 src/app/actions/        server actions (mutations) — one file per domain
 src/components/         UI, grouped by feature
-src/lib/                 auth, session, prisma client, formatting, RBAC
-prisma/schema.prisma     data model
-prisma/seed.ts           demo data generator
+src/lib/api.ts           the only place that talks to the Django backend
+src/lib/session.ts       session cookie + current-user resolution
+src/lib/auth.ts          requireUser()/requireRole() route guards
+src/lib/rbac.ts          role/nav-visibility config (UX, not security)
 ```
 
 ## Scope notes
@@ -74,17 +89,18 @@ future work in the source document.
 
 ## Hosting
 
-Recommended: **Vercel** for the app itself, with the database swapped from
-SQLite to a managed Postgres instance (Neon, Vercel Postgres, Supabase, or
-Railway all work well). SQLite is dev-only here — it's a single file on
-disk, which doesn't survive Vercel's ephemeral serverless filesystem.
+Two services now need hosting:
 
-To switch datasources: change `provider = "sqlite"` to `"postgresql"` in
-`prisma/schema.prisma`, point `DATABASE_URL` at the Postgres instance, swap
-the `@prisma/adapter-better-sqlite3` adapter in `src/lib/prisma.ts` and
-`prisma/seed.ts` for `@prisma/adapter-pg` (or drop the adapter entirely and
-let Prisma use its default Postgres driver), then run
-`npx prisma migrate deploy`.
+- **Frontend (this repo)**: **Vercel** — it's a stock Next.js app, deploys
+  with zero config. Set `DJANGO_API_URL` to wherever the backend ends up.
+- **Backend (`../meridian-api`)**: needs somewhere that runs a persistent
+  Python process (Vercel's serverless model doesn't fit Django well).
+  **Railway** or **Render** both work cleanly and can host Postgres
+  alongside it — swap `DATABASES` in `core/settings.py` from SQLite before
+  deploying, since SQLite is a single file on disk that won't survive a
+  redeploy or multiple instances.
 
-Railway is a solid alternative if you'd rather keep the app and database on
-one platform instead of splitting Vercel + a DB provider.
+If you'd rather run one platform instead of two, **Railway can host both**
+services (the Django API and this Next.js app) plus a managed Postgres
+instance in the same project — worth it if you want a single dashboard
+instead of splitting Vercel + Railway.

@@ -2,22 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiPatch } from "@/lib/api";
 
-export async function dispensePrescriptionAction(prescriptionId: string) {
-  const user = await requireRole(["PHARMACIST", "ADMIN"]);
+export async function dispensePrescriptionAction(prescriptionId: number) {
+  await requireRole(["PHARMACIST", "ADMIN"]);
 
-  const prescription = await prisma.prescription.update({
-    where: { id: prescriptionId },
-    data: {
-      dispensed: true,
-      dispensedById: user.id,
-      dispensedAt: new Date(),
-    },
-    include: { medicalRecord: { select: { patientId: true } } },
-  });
+  const prescription = await apiPatch(`/prescriptions/${prescriptionId}/dispense/`);
 
   revalidatePath("/pharmacy");
-  revalidatePath(`/patients/${prescription.medicalRecord.patientId}`);
+  revalidatePath(`/patients/${prescription.patientId}`);
   revalidatePath("/dashboard");
 }

@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,16 +18,26 @@ import { Button } from "@/components/ui/button";
 import { greeting, formatDateLong, formatTime, patientName } from "@/lib/format";
 import { ROLE_LABELS } from "@/lib/rbac";
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function endOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
+type DashboardAppointment = {
+  id: number;
+  patientId: number;
+  patient: { firstName: string; lastName: string };
+  doctor: { name: string };
+  reason: string | null;
+  time: string;
+  status: "PENDING" | "COMPLETED" | "CANCELLED";
+};
+
+type DashboardPatient = { id: number; firstName: string; lastName: string; patientCode: string };
+
+type DashboardSummary = {
+  patientCount: number;
+  activeStaff: number | null;
+  todaysAppointments: DashboardAppointment[];
+  pendingPrescriptions: number;
+  pendingLabs: number;
+  recentPatients: DashboardPatient[];
+};
 
 export default async function DashboardPage({
   searchParams,
@@ -35,36 +45,16 @@ export default async function DashboardPage({
   const user = await requireUser();
   const { denied } = await searchParams;
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
 
-  const appointmentWhere =
-    user.role === "DOCTOR"
-      ? { doctorId: user.id, date: { gte: todayStart, lte: todayEnd } }
-      : { date: { gte: todayStart, lte: todayEnd } };
-
-  const [todaysAppointments, patientCount, pendingPrescriptions, pendingLabs] =
-    await Promise.all([
-      prisma.appointment.findMany({
-        where: appointmentWhere,
-        include: { patient: true, doctor: true },
-        orderBy: { time: "asc" },
-        take: 8,
-      }),
-      prisma.patient.count(),
-      prisma.prescription.count({ where: { dispensed: false } }),
-      prisma.labResult.count({ where: { status: "PENDING" } }),
-    ]);
-
-  const [activeStaff, recentPatients] = await Promise.all([
-    user.role === "ADMIN" ? prisma.user.count({ where: { status: "ACTIVE" } }) : null,
-    user.role === "RECORDS_OFFICER" || user.role === "ADMIN"
-      ? prisma.patient.findMany({
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        })
-      : null,
-  ]);
+  const summary: DashboardSummary = await apiGet("/dashboard/summary/");
+  const {
+    patientCount,
+    activeStaff,
+    todaysAppointments,
+    pendingPrescriptions,
+    pendingLabs,
+    recentPatients,
+  } = summary;
 
   return (
     <div>
@@ -213,7 +203,7 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      {recentPatients && recentPatients.length > 0 && (
+      {recentPatients.length > 0 && (
         <Card className="mt-6">
           <CardHeader>
             <CardTitle>Recently registered</CardTitle>

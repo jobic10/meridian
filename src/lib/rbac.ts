@@ -1,4 +1,4 @@
-import type { Role } from "@/generated/prisma/client";
+export type Role = "ADMIN" | "DOCTOR" | "NURSE" | "RECORDS_OFFICER" | "PHARMACIST";
 
 export const ROLES: Role[] = [
   "ADMIN",

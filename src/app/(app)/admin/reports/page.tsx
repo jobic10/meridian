@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -7,77 +7,46 @@ import { StatusBars } from "@/components/charts/status-bars";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users, CalendarClock, Pill, ShieldCheck } from "lucide-react";
 
-function weekLabel(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(date);
-}
+type ReportsSummary = {
+  patientCount: number;
+  appointmentCount: number;
+  activeStaff: number;
+  dispensedCount: number;
+  weeklyRegistrations: { label: string; value: number }[];
+  appointmentStatus: { label: string; value: number; tone: "warning" | "success" | "danger" }[];
+  topDiagnoses: { label: string; value: number }[];
+};
 
-function startOfWeek(d: Date) {
-  const x = new Date(d);
-  const day = x.getDay();
-  const diff = (day + 6) % 7; // Monday as start
-  x.setDate(x.getDate() - diff);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
+const TONE_COLOR_VAR: Record<string, string> = {
+  warning: "var(--color-warning)",
+  success: "var(--color-success)",
+  danger: "var(--color-danger)",
+};
 
 export default async function ReportsPage() {
   await requireRole(["ADMIN"]);
 
-  const [
+  const summary: ReportsSummary = await apiGet("/reports/summary/");
+  const {
     patientCount,
     appointmentCount,
     activeStaff,
     dispensedCount,
-    patients,
-    appointments,
-    records,
-  ] = await Promise.all([
-    prisma.patient.count(),
-    prisma.appointment.count(),
-    prisma.user.count({ where: { status: "ACTIVE" } }),
-    prisma.prescription.count({ where: { dispensed: true } }),
-    prisma.patient.findMany({ select: { createdAt: true } }),
-    prisma.appointment.groupBy({ by: ["status"], _count: { status: true } }),
-    prisma.medicalRecord.findMany({ select: { diagnosis: true } }),
-  ]);
+    weeklyRegistrations,
+    appointmentStatus,
+    topDiagnoses,
+  } = summary;
 
-  // Weekly registrations, last 8 weeks
-  const now = new Date();
-  const weeks: { start: Date; label: string; value: number }[] = [];
-  for (let i = 7; i >= 0; i--) {
-    const start = startOfWeek(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i * 7));
-    weeks.push({ start, label: weekLabel(start), value: 0 });
-  }
-  for (const p of patients) {
-    const bucketStart = startOfWeek(p.createdAt);
-    const match = weeks.find((w) => w.start.getTime() === bucketStart.getTime());
-    if (match) match.value += 1;
-  }
-
-  // Appointment status breakdown
-  const statusOrder: Array<{ key: string; label: string; colorVar: string }> = [
-    { key: "PENDING", label: "Pending", colorVar: "var(--color-warning)" },
-    { key: "COMPLETED", label: "Completed", colorVar: "var(--color-success)" },
-    { key: "CANCELLED", label: "Cancelled", colorVar: "var(--color-danger)" },
-  ];
-  const statusRows = statusOrder.map((s) => ({
+  const statusRows = appointmentStatus.map((s) => ({
     label: s.label,
-    colorVar: s.colorVar,
-    value: appointments.find((a) => a.status === s.key)?._count.status ?? 0,
+    value: s.value,
+    colorVar: TONE_COLOR_VAR[s.tone],
   }));
 
-  // Top diagnoses
-  const diagnosisCounts = new Map<string, number>();
-  for (const r of records) {
-    diagnosisCounts.set(r.diagnosis, (diagnosisCounts.get(r.diagnosis) ?? 0) + 1);
-  }
-  const topDiagnoses = [...diagnosisCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([label, value]) => ({
-      label: label.length > 18 ? `${label.slice(0, 17)}…` : label,
-      value,
-    }));
+  const diagnosisRows = topDiagnoses.map((d) => ({
+    label: d.label.length > 18 ? `${d.label.slice(0, 17)}…` : d.label,
+    value: d.value,
+  }));
 
   return (
     <div>
@@ -103,7 +72,7 @@ export default async function ReportsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <BarChart data={weeks.map((w) => ({ label: w.label, value: w.value }))} />
+            <BarChart data={weeklyRegistrations} />
           </CardContent>
         </Card>
 
@@ -127,13 +96,13 @@ export default async function ReportsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {topDiagnoses.length === 0 ? (
+            {diagnosisRows.length === 0 ? (
               <p className="py-6 text-center text-[13.5px] text-ink-faint">
                 No medical records yet.
               </p>
             ) : (
               <BarChart
-                data={topDiagnoses}
+                data={diagnosisRows}
                 color="var(--color-accent)"
                 height={210}
                 angledLabels

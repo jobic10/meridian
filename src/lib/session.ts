@@ -1,51 +1,43 @@
 import "server-only";
-import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { cache } from "react";
-import { prisma } from "@/lib/prisma";
-import type { Role } from "@/generated/prisma/client";
+import { apiGet, SESSION_COOKIE, ApiError } from "@/lib/api";
+import type { Role } from "@/lib/rbac";
 
-const secretKey = process.env.SESSION_SECRET;
-if (!secretKey) throw new Error("SESSION_SECRET is not set");
-const encodedKey = new TextEncoder().encode(secretKey);
-
-const SESSION_COOKIE = "meridian_session";
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 8; // 8 hour shift-length session
-
-export type SessionPayload = {
-  userId: string;
-  expiresAt: number;
+export type AuthorisedUser = {
+  id: number;
+  name: string;
+  username: string;
+  email: string;
+  role: Role;
+  specialisation: string | null;
+  status: "ACTIVE" | "INACTIVE";
 };
 
-export async function encryptSession(payload: SessionPayload) {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(Math.floor(payload.expiresAt / 1000))
-    .sign(encodedKey);
-}
-
-export async function decryptSession(token?: string) {
-  if (!token) return null;
+/**
+ * Data Access Layer: the source of truth for "who is logged in right now".
+ * Re-verified per request against Django (not just trusting the proxy's
+ * cookie check) — this is the actual boundary a deactivated account or an
+ * expired token gets caught at.
+ */
+export const getCurrentUser = cache(async (): Promise<AuthorisedUser | null> => {
   try {
-    const { payload } = await jwtVerify<SessionPayload>(token, encodedKey, {
-      algorithms: ["HS256"],
-    });
-    return payload;
-  } catch {
-    return null;
+    return await apiGet("/auth/me/");
+  } catch (err) {
+    if (err instanceof ApiError) return null;
+    throw err;
   }
-}
+});
 
-export async function createSession(userId: string) {
-  const expiresAt = Date.now() + SESSION_DURATION_MS;
-  const token = await encryptSession({ userId, expiresAt });
+export async function createSession(accessToken: string) {
   const store = await cookies();
-  store.set(SESSION_COOKIE, token, {
+  store.set(SESSION_COOKIE, accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    expires: new Date(expiresAt),
+    // Matches Django's SIMPLE_JWT ACCESS_TOKEN_LIFETIME — a shift-length
+    // session with no refresh flow, same UX as before.
+    maxAge: 60 * 60 * 8,
     path: "/",
   });
 }
@@ -54,41 +46,3 @@ export async function deleteSession() {
   const store = await cookies();
   store.delete(SESSION_COOKIE);
 }
-
-/**
- * Data Access Layer: the source of truth for "who is logged in right now".
- * Re-verified per request (not just trusting the proxy's cookie check), and
- * re-reads the user row so a deactivated account loses access immediately.
- */
-export const getCurrentUser = cache(async () => {
-  const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
-  const session = await decryptSession(token);
-  if (!session?.userId) return null;
-
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      role: true,
-      specialisation: true,
-      status: true,
-    },
-  });
-  if (!user || user.status !== "ACTIVE") return null;
-
-  return user;
-});
-
-export type AuthorisedUser = {
-  id: string;
-  name: string;
-  username: string;
-  role: Role;
-  specialisation: string | null;
-  status: "ACTIVE" | "INACTIVE";
-};
-
-export { SESSION_COOKIE };

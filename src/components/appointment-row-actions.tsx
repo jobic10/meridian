@@ -9,7 +9,7 @@ export function AppointmentRowActions({
   appointmentId,
   status,
 }: {
-  appointmentId: string;
+  appointmentId: number;
   status: "PENDING" | "COMPLETED" | "CANCELLED";
 }) {
   const [isPending, startTransition] = useTransition();

@@ -1,10 +1,9 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiPost, apiPatch, ApiError } from "@/lib/api";
 
 const staffSchema = z.object({
   name: z.string().min(1, "Enter the staff member's full name"),
@@ -39,44 +38,26 @@ export async function createStaffAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
 
-  const username = parsed.data.username.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { username } });
-  if (existing) {
-    return { error: "That username is already taken." };
-  }
-
-  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-
-  await prisma.user.create({
-    data: {
+  try {
+    await apiPost("/users/", {
       name: parsed.data.name,
-      username,
+      username: parsed.data.username.trim().toLowerCase(),
       email: parsed.data.email || undefined,
       role: parsed.data.role,
-      specialisation:
-        parsed.data.role === "DOCTOR" ? parsed.data.specialisation : undefined,
-      passwordHash,
-    },
-  });
+      specialisation: parsed.data.role === "DOCTOR" ? parsed.data.specialisation : undefined,
+      password: parsed.data.password,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Unable to reach the server. Please try again." };
+  }
 
   revalidatePath("/admin/staff");
   return { success: true };
 }
 
-export async function toggleStaffStatusAction(userId: string) {
-  const admin = await requireRole(["ADMIN"]);
-  if (admin.id === userId) return;
-
-  const target = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { status: true },
-  });
-  if (!target) return;
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { status: target.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" },
-  });
-
+export async function toggleStaffStatusAction(userId: number) {
+  await requireRole(["ADMIN"]);
+  await apiPatch(`/users/${userId}/toggle-status/`);
   revalidatePath("/admin/staff");
 }

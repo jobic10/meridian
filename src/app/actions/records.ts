@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiPost, ApiError } from "@/lib/api";
 
 const prescriptionRowSchema = z.object({
   drugName: z.string().min(1),
@@ -25,7 +25,7 @@ export async function createMedicalRecordAction(
   _prevState: RecordFormState,
   formData: FormData
 ): Promise<RecordFormState> {
-  const user = await requireRole(["DOCTOR", "ADMIN"]);
+  await requireRole(["DOCTOR", "ADMIN"]);
 
   let prescriptions: unknown = [];
   try {
@@ -47,28 +47,18 @@ export async function createMedicalRecordAction(
     return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
 
-  const patient = await prisma.patient.findUnique({
-    where: { id: parsed.data.patientId },
-    select: { id: true },
-  });
-  if (!patient) return { error: "Patient not found." };
-
-  await prisma.medicalRecord.create({
-    data: {
-      patientId: parsed.data.patientId,
-      doctorId: user.id,
+  try {
+    await apiPost("/medical-records/", {
+      patient: Number(parsed.data.patientId),
       symptoms: parsed.data.symptoms,
       diagnosis: parsed.data.diagnosis,
-      treatmentNotes: parsed.data.treatmentNotes,
-      prescriptions: {
-        create: parsed.data.prescriptions.map((p) => ({
-          drugName: p.drugName,
-          dosage: p.dosage,
-          duration: p.duration,
-        })),
-      },
-    },
-  });
+      treatmentNotes: parsed.data.treatmentNotes ?? "",
+      prescriptions: parsed.data.prescriptions,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Unable to reach the server. Please try again." };
+  }
 
   revalidatePath(`/patients/${parsed.data.patientId}`);
   return { success: true };

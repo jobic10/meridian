@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 
-type Doctor = { id: string; name: string; specialisation: string | null };
-type PatientOption = { id: string; label: string };
+type Doctor = { id: number; name: string; specialisation: string | null };
+type PatientOption = { id: number; label: string };
 
 export function ScheduleAppointmentDialog({
   doctors,
@@ -84,7 +84,7 @@ export function ScheduleAppointmentDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {(patients ?? []).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
+                      <SelectItem key={p.id} value={String(p.id)}>
                         {p.label}
                       </SelectItem>
                     ))}
@@ -99,7 +99,7 @@ export function ScheduleAppointmentDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {doctors.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
+                    <SelectItem key={d.id} value={String(d.id)}>
                       {d.name}
                       {d.specialisation ? ` — ${d.specialisation}` : ""}
                     </SelectItem>

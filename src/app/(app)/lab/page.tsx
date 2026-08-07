@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { CompleteLabDialog } from "@/components/complete-lab-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -13,24 +13,28 @@ import {
   TableCell,
   TableEmpty,
 } from "@/components/ui/table";
-import { formatDate, patientName } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+
+type LabRow = {
+  id: number;
+  patientId: number;
+  patientName: string;
+  testName: string;
+  result: string | null;
+  status: "PENDING" | "COMPLETED";
+  enteredBy: { name: string };
+  createdAt: string;
+  completedAt: string | null;
+};
 
 export default async function LabPage() {
   await requireRole(["ADMIN", "DOCTOR", "NURSE"]);
 
-  const [pending, completed] = await Promise.all([
-    prisma.labResult.findMany({
-      where: { status: "PENDING" },
-      include: { patient: true, enteredBy: { select: { name: true } } },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.labResult.findMany({
-      where: { status: "COMPLETED" },
-      include: { patient: true, enteredBy: { select: { name: true } } },
-      orderBy: { completedAt: "desc" },
-      take: 15,
-    }),
+  const [pending, completed]: [LabRow[], LabRow[]] = await Promise.all([
+    apiGet("/lab-results/?status=PENDING"),
+    apiGet("/lab-results/?status=COMPLETED"),
   ]);
+  const recentCompleted = completed.slice(0, 15);
 
   return (
     <div>
@@ -60,19 +64,23 @@ export default async function LabPage() {
             ) : (
               pending.map((l) => (
                 <TableRow key={l.id}>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Link
                       href={`/patients/${l.patientId}`}
                       className="font-medium text-ink hover:text-primary"
                     >
-                      {patientName(l.patient)}
+                      {l.patientName}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-ink">{l.testName}</TableCell>
-                  <TableCell className="text-ink-muted">{l.enteredBy.name}</TableCell>
-                  <TableCell className="text-ink-muted">{formatDate(l.createdAt)}</TableCell>
-                  <TableCell>
-                    <CompleteLabDialog labResultId={l.id} testName={l.testName} />
+                  <TableCell className="whitespace-nowrap text-ink">{l.testName}</TableCell>
+                  <TableCell className="whitespace-nowrap text-ink-muted">
+                    {l.enteredBy.name}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-ink-muted">
+                    {formatDate(l.createdAt)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <CompleteLabDialog labResultId={String(l.id)} testName={l.testName} />
                   </TableCell>
                 </TableRow>
               ))
@@ -95,24 +103,24 @@ export default async function LabPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {completed.length === 0 ? (
+            {recentCompleted.length === 0 ? (
               <TableEmpty colSpan={4}>No completed results yet.</TableEmpty>
             ) : (
-              completed.map((l) => (
+              recentCompleted.map((l) => (
                 <TableRow key={l.id}>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Link
                       href={`/patients/${l.patientId}`}
                       className="font-medium text-ink hover:text-primary"
                     >
-                      {patientName(l.patient)}
+                      {l.patientName}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-ink">{l.testName}</TableCell>
+                  <TableCell className="whitespace-nowrap text-ink">{l.testName}</TableCell>
                   <TableCell className="max-w-xs truncate text-ink-muted" title={l.result ?? ""}>
                     {l.result}
                   </TableCell>
-                  <TableCell className="text-ink-muted">
+                  <TableCell className="whitespace-nowrap text-ink-muted">
                     {l.completedAt ? formatDate(l.completedAt) : "—"}
                     <Badge variant="success" className="ml-2">
                       Done

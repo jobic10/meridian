@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { apiGet } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { ScheduleAppointmentDialog } from "@/components/schedule-appointment-dialog";
 import { AppointmentRowActions } from "@/components/appointment-row-actions";
@@ -16,27 +16,28 @@ import {
 } from "@/components/ui/table";
 import { formatDate, formatTime, patientName } from "@/lib/format";
 
+type AppointmentRow = {
+  id: number;
+  patientId: number;
+  patient: { firstName: string; lastName: string };
+  doctor: { name: string };
+  date: string;
+  time: string;
+  reason: string | null;
+  status: "PENDING" | "COMPLETED" | "CANCELLED";
+};
+
 export default async function AppointmentsPage() {
   const user = await requireRole(["ADMIN", "DOCTOR", "NURSE", "RECORDS_OFFICER"]);
 
-  const where = user.role === "DOCTOR" ? { doctorId: user.id } : {};
-
-  const [appointments, doctors, patients] = await Promise.all([
-    prisma.appointment.findMany({
-      where,
-      include: { patient: true, doctor: { select: { name: true } } },
-      orderBy: [{ date: "desc" }, { time: "asc" }],
-      take: 150,
-    }),
-    prisma.user.findMany({
-      where: { role: "DOCTOR", status: "ACTIVE" },
-      select: { id: true, name: true, specialisation: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.patient.findMany({
-      select: { id: true, firstName: true, lastName: true, patientCode: true },
-      orderBy: { firstName: "asc" },
-    }),
+  const [appointments, doctors, patients]: [
+    AppointmentRow[],
+    Array<{ id: number; name: string; specialisation: string | null }>,
+    Array<{ id: number; firstName: string; lastName: string; patientCode: string }>,
+  ] = await Promise.all([
+    apiGet("/appointments/"),
+    apiGet("/users/?role=DOCTOR&status=ACTIVE"),
+    apiGet("/patients/"),
   ]);
 
   const patientOptions = patients.map((p) => ({
@@ -74,7 +75,7 @@ export default async function AppointmentsPage() {
             ) : (
               appointments.map((a) => (
                 <TableRow key={a.id}>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Link
                       href={`/patients/${a.patientId}`}
                       className="font-medium text-ink hover:text-primary"
@@ -82,13 +83,22 @@ export default async function AppointmentsPage() {
                       {patientName(a.patient)}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-ink-muted">{a.doctor.name}</TableCell>
-                  <TableCell className="text-ink-muted">{formatDate(a.date)}</TableCell>
-                  <TableCell className="font-mono text-[12.5px] text-ink-muted">
+                  <TableCell className="whitespace-nowrap text-ink-muted">
+                    {a.doctor.name}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-ink-muted">
+                    {formatDate(a.date)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap font-mono text-[12.5px] text-ink-muted">
                     {formatTime(a.time)}
                   </TableCell>
-                  <TableCell className="text-ink-muted">{a.reason ?? "—"}</TableCell>
-                  <TableCell>
+                  <TableCell
+                    className="max-w-40 truncate text-ink-muted"
+                    title={a.reason ?? undefined}
+                  >
+                    {a.reason ?? "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge
                       variant={
                         a.status === "COMPLETED"
