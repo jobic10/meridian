@@ -1,26 +1,96 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm clinical-archive palette — paper & ink, not SaaS blue/gray */
+  --paper: #faf8f3;
+  --surface: #ffffff;
+  --surface-sunken: #f3f0e8;
+  --ink: #1a2420;
+  --ink-muted: #5b6862;
+  --ink-faint: #8a958e;
+  --border: #e5e0d3;
+  --border-strong: #d3ccba;
+
+  --primary: #0e4f44;
+  --primary-hover: #0b3f37;
+  --primary-soft: #e4efec;
+  --primary-ring: #0e4f4433;
+
+  --accent: #b8602f;
+  --accent-soft: #f6e9df;
+
+  --success: #1e7a4c;
+  --success-soft: #e3f1e8;
+  --warning: #a6720f;
+  --warning-soft: #faf0d9;
+  --danger: #a83b3b;
+  --danger-soft: #f7e6e4;
+
+  --focus-ring: #0e4f44;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* Subtle focus treatment — a thin ring, not the default browser blue */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Fine paper-grain texture for large flat surfaces, applied selectively */
+.bg-grain {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(26, 36, 32, 0.045) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
 }
