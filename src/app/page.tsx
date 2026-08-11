@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PasswordGate } from "@/components/password-gate";
 
 const MODULES = [
   {
@@ -60,6 +61,7 @@ const ROLES = [
 
 export default function Home() {
   return (
+    <PasswordGate>
     <div className="flex flex-1 flex-col">
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -71,9 +73,14 @@ export default function Home() {
               Meridian
             </span>
           </div>
-          <Button variant="secondary" asChild>
-            <Link href="/login">Sign in</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" asChild>
+              <Link href="/guide">Guide &amp; docs</Link>
+            </Button>
+            <Button variant="secondary" asChild>
+              <Link href="/login">Sign in</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -195,8 +202,15 @@ export default function Home() {
           <p className="text-[12px] text-ink-faint">
             Not for use with real patient data.
           </p>
+          <Link
+            href="/guide"
+            className="mt-2 text-[12.5px] font-medium text-primary hover:underline"
+          >
+            Read the guide &amp; documentation →
+          </Link>
         </div>
       </footer>
     </div>
+    </PasswordGate>
   );
 }

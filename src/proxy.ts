@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/guide"];
 
 /**
  * Decode (not verify) the JWT payload to read `exp`. This is purely to stop

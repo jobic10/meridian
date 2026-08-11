@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
+import { BackendStatus } from "@/components/backend-status";
 
 export default function LoginPage() {
   return (
@@ -73,7 +74,11 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-7">
+        <div className="mt-4">
+          <BackendStatus />
+        </div>
+
+        <div className="mt-5">
           <LoginForm />
         </div>
 
