@@ -57,6 +57,12 @@ export function LoginForm() {
         <Button type="submit" size="lg" disabled={pending} className="mt-1">
           {pending ? "Signing in…" : "Sign in"}
         </Button>
+        {pending && (
+          <p className="text-center text-[12px] text-ink-faint">
+            First sign-in after a quiet spell can take up to a minute while
+            the server wakes up — hang tight.
+          </p>
+        )}
       </form>
 
       <div className="mt-8">

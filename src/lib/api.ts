@@ -34,8 +34,8 @@ function firstFieldError(body: unknown): string | undefined {
 // retry those specifically, with each attempt capped so one hung attempt
 // can't block the whole budget. Real HTTP errors (401, 400, ...) still fail
 // immediately; only "couldn't reach it yet" is worth waiting out.
-const RETRY_DELAYS_MS = [2000, 3000, 5000, 8000, 13000];
-const PER_ATTEMPT_TIMEOUT_MS = 15000;
+const RETRY_DELAYS_MS = [2000, 3000, 5000, 8000, 13000, 20000];
+const PER_ATTEMPT_TIMEOUT_MS = 25000;
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 
 function sleep(ms: number) {
