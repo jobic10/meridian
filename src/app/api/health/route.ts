@@ -13,7 +13,7 @@ const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
 export async function GET() {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
+  const timeout = setTimeout(() => controller.abort(), 25000);
 
   try {
     const res = await fetch(`${API_BASE}/health/`, {
